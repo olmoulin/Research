@@ -93,14 +93,22 @@ class MultipleAgentsOneTraining():
 		if solved==False:
 			ag=Agent(env_seed)
 			ag.solve()
-			grid_ag = (ag,np.array(env_seed))
+			grid_ag = (ag,np.array([env_seed]))
 			self.Agent_grid.append(grid_ag)
 			i = len(self.Agent_grid)-1
+			k = 0
+			while k<len(self.Agent_grid):
+				list_env = self.Agent_grid[k][1].tolist()
+				for env_test in list_env:
+					self.Agent_grid[i][0].change_environment(env_test)
+					if self.Agent_grid[i][0].check()>=0.80:
+						if env_test not in self.Agent_grid[i][1]:
+							self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_test))
+				k+=1
 		else:
 			if env_seed not in self.Agent_grid[i][1]:
-				if (env_seed not in self.Agent_grid[i][1]):
-					self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_seed))
-		j = 0
+				self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_seed))
+		j=0				
 		to_compare=self.Agent_grid[i][1]
 		while j<len(self.Agent_grid):
 			test_res = np.in1d(self.Agent_grid[j][1],to_compare)
