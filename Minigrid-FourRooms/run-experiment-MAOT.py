@@ -33,7 +33,8 @@ class Agent():
 		
 
 	def __init__ (self,env_nb):
-		self.env = gym.make('MiniGrid-FourRooms-v0')
+		#self.env = gym.make('MiniGrid-FourRooms-v0')
+		self.env = gym.make('MiniGrid-MultiRoom-N4-S5-v0')
 		self.env = ImgObsWrapper(self.env)
 		self.env.seed(env_nb)	
 		self.env.reset()	
@@ -54,14 +55,17 @@ class Agent():
 		return total_rew
 
 	def solve(self):
+		training_frame = 0
 		solved = False
 		while solved==False:
 			self.model.learn(total_timesteps=100000)
+			training_frame+=100000
 			chk = self.check()
 			print("Check for stopping training : ",chk)
 			if chk>=0.80:
 				solved = True
 			sys.stdout.flush()
+		return training_frame
 			
 	def save(self,i,it):
 		self.model.save('Agent_'+str(i)+'_'+str(it)+'.mdl')
@@ -79,6 +83,7 @@ class MultipleAgentsOneTraining():
 		return(e[1].size)
 
 	def train(self,env_seed):
+		training_frame = 0
 		print("Training on environment ",env_seed)
 		start_time = time.time()
 		solved= False
@@ -92,34 +97,34 @@ class MultipleAgentsOneTraining():
 				i+=1
 		if solved==False:
 			ag=Agent(env_seed)
-			ag.solve()
+			training_frame+=ag.solve()
 			grid_ag = (ag,np.array([env_seed]))
 			self.Agent_grid.append(grid_ag)
 			i = len(self.Agent_grid)-1
 			k = 0
 			while k<len(self.Agent_grid):
 				list_env = self.Agent_grid[k][1].tolist()
+				can_solve_all=True
 				for env_test in list_env:
 					self.Agent_grid[i][0].change_environment(env_test)
 					if self.Agent_grid[i][0].check()>=0.80:
 						if env_test not in self.Agent_grid[i][1]:
 							self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_test))
-				k+=1
+					else:
+						can_solve_all=False
+				if can_solve_all==True and k!=i:
+					self.Agent_grid.pop(k)
+					if k<i:
+						i-=1
+				else:
+					k+=1
 		else:
 			if env_seed not in self.Agent_grid[i][1]:
 				self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_seed))
-		j=0				
-		to_compare=self.Agent_grid[i][1]
-		while j<len(self.Agent_grid):
-			test_res = np.in1d(self.Agent_grid[j][1],to_compare)
-			if np.all(test_res) and j!=i:
-				self.Agent_grid.pop(j)
-			else:
-				j+=1
 		self.Agent_grid.sort(key=self.sort_list,reverse=True)
 		elapsed_time = time.time() - start_time
 		print("Time elapsed: ",time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
-		return elapsed_time
+		return elapsed_time,training_frame
 
 	def print_architecture(self):
 		print("Agent eco-system architecture")
@@ -174,8 +179,11 @@ def generate_results_MAOT():
 	general=[]
 	access=[]
 	t_time=0
+	training_frame=0
 	for i in range(0,1001):
-		t_time+=MAOT.train(np.random.randint(65000))
+		tm,frm=MAOT.train(np.random.randint(65000))
+		t_time+=tm
+		training_frame+=frm
 		if i % 50 ==0:
 			MAOT.checkpoint(i)
 			count_tested = 0.0
@@ -186,6 +194,7 @@ def generate_results_MAOT():
 					count_ok+=1.0
 			general.append(count_ok/count_tested)
 			print("*******************************Generalizability test : ",count_ok/count_tested,"*****************")
+			print("Total steps used :",training_frame)
 	g_npy=np.array(general)
 	np.save('Multi_agent_one_training_general.npy',g_npy)
 	plt.title('% generalization on new environments')
