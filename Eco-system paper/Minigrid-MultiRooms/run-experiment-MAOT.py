@@ -152,7 +152,7 @@ class MultipleAgentsOneTraining():
 		
 	
 	def test(self,nb_env):
-		max_res=-100
+		max_res=0
 		found = False
 		j=0
 		while found == False and j<len(self.Agent_grid):
@@ -165,8 +165,9 @@ class MultipleAgentsOneTraining():
 		while found == False and j<len(self.Agent_grid):
 			self.Agent_grid[j][0].change_environment(nb_env)
 			res=self.Agent_grid[j][0].check()
-			if res>=0.80:
+			if res>max_res:
 				max_res=res
+			if res>=0.80:
 				found = True
 			j+=1
 		return max_res
@@ -179,7 +180,7 @@ def generate_results_MAOT():
 	access=[]
 	t_time=0
 	training_frame=0
-	for i in range(0,1001):
+	for i in range(0,1501):
 		tm,frm=MAOT.train(np.random.randint(65000))
 		t_time+=tm
 		training_frame+=frm
@@ -187,17 +188,23 @@ def generate_results_MAOT():
 			MAOT.checkpoint(i)
 			count_tested = 0.0
 			count_ok = 0.0
-			for j in range(0,1001):
+			total_res = 0
+			for j in range(0,30):
 				count_tested+=1.0
-				if MAOT.test(np.random.randint(65000))>=0.8:
+				res =MAOT.test(np.random.randint(65000)) 
+				if res>=0.8:
 					count_ok+=1.0
+				if res<0:
+					res=0	
+				total_res+=res
 			general.append(count_ok/count_tested)
 			print("*******************************Generalizability test : ",count_ok/count_tested,"*****************")
 			print("Total steps used :",training_frame)
+			print("Average return:",total_res/30)
 	g_npy=np.array(general)
 	np.save('Multi_agent_one_training_general.npy',g_npy)
 	plt.title('% generalization on new environments')
-	plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
+	plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000,1050,1100,1150,1200,1250,1300,1350,1400,1450,1500],rotation=90)
 	plt.plot(general, color='black', label='accuracy')
 	plt.legend()
 	plt.savefig('Multi_agent_one_training_general.png')
