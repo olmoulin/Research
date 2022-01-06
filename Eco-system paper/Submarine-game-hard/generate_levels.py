@@ -25,21 +25,20 @@ from deer.learning_algos.q_net_keras import MyQNetwork
 import deer.experiment.base_controllers as bc
 from deer.policies import EpsilonGreedyPolicy
 
-import moviepy.editor as mpy
 import time
 
 def main():
     for seed in range(0,10000):
         np.random.seed(seed)
-        Marine=np.zeros((11,15))
-        Marine[0,0:10]= 1
-        Marine[10,0:10]=1
-        for i in range(0,15):
+        Marine=np.zeros((11,35))
+        Marine[0,0:20]= 1
+        Marine[10,0:20]=1
+        for i in range(0,35):
             if i%2==0 and i>0:
                 for j in range(0,3):
                     rnd = np.random.randint(0,11)
                     Marine[rnd,i]=1
-            if i>=10:
+            if i>=20:
                 Marine[0:11,i]=1
         np.save('level/level-'+str(seed)+'.npy',Marine)
 

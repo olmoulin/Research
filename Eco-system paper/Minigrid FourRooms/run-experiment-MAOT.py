@@ -7,7 +7,6 @@ import os, sys, time, datetime, json, random
 import gym
 from PIL import Image
 
-
 from stable_baselines3 import PPO
 
 import time
@@ -55,7 +54,6 @@ class Agent():
 		return total_rew
 
 	def solve(self):
-		self.print_environment()
 		solved = False
 		while solved==False:
 			self.model.learn(total_timesteps=100000)
@@ -72,57 +70,121 @@ class Agent():
 		self.model = PPO.load('Agent_'+str(i)+'_'+str(it)+'.mdl')
 			
 
-class OneAgentMultipleTrainings():
+class MultipleAgentsOneTraining():
 	def __init__ (self):
-		self.single_agent = Agent(0) 
+		self.Agent_grid=[]
+		i=0
+
+	def sort_list(self,e):
+		return(e[1].size)
 
 	def train(self,env_seed):
 		print("Training on environment ",env_seed)
 		start_time = time.time()
-		self.single_agent.change_environment(env_seed)
-		if self.single_agent.check()<0.8:
-			self.single_agent.solve()
+		solved= False
+		i = 0
+		while solved==False and i<len(self.Agent_grid):
+			ag_test = self.Agent_grid[i][0]
+			ag_test.change_environment(env_seed)
+			if ag_test.check()>=0.80:
+				solved=True
+			else:
+				i+=1
+		if solved==False:
+			ag=Agent(env_seed)
+			ag.solve()
+			grid_ag = (ag,np.array(env_seed))
+			self.Agent_grid.append(grid_ag)
+			i = len(self.Agent_grid)-1
+		else:
+			if env_seed not in self.Agent_grid[i][1]:
+				if (env_seed not in self.Agent_grid[i][1]):
+					self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_seed))
+		j = 0
+		to_compare=self.Agent_grid[i][1]
+		while j<len(self.Agent_grid):
+			test_res = np.in1d(self.Agent_grid[j][1],to_compare)
+			if np.all(test_res) and j!=i:
+				self.Agent_grid.pop(j)
+			else:
+				j+=1
+		self.Agent_grid.sort(key=self.sort_list,reverse=True)
 		elapsed_time = time.time() - start_time
 		print("Time elapsed: ",time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
 		return elapsed_time
 
+	def print_architecture(self):
+		print("Agent eco-system architecture")
+		print("Number of active agents : ",len(self.Agent_grid))
+		total_env = 0
+		for i in range(0,len(self.Agent_grid)):
+			total_env += self.Agent_grid[i][1].size
+			print("Number of environments covered : ",total_env)
+		print("Architecture")
+		for i in range(0,len(self.Agent_grid)):
+			print("Agent : ",i)
+			print("Environments : ",self.Agent_grid[i][1])
+	
 	def checkpoint(self,it):
-			self.single_agent.save(0,it)
+		for i in range(0,len(self.Agent_grid)):
+			self.Agent_grid[i][0].save(i,it)
+			np.save('Agent_covered_'+str(i)+'_'+str(it)+'.npy',self.Agent_grid[i][1])
 	
 	def restore(self,it):
-		self.single_agent = Agent(0)
-		self.single_agent.load(0,it)		
+		self.Agent_grid=[]
+		for i in range(0,len(self.Agent_grid)):
+			ag = Agent(0)
+			ag.load(i,it)
+			env_covered = np.load('Agent_covered_'+str(i)+'_'+str(it)+'.npy')
+			self.Agent_grid.append((ag,env_covered))
+		
 	
 	def test(self,nb_env):
-		self.single_agent.change_environment(nb_env)
-		return self.single_agent.check()
+		max_res=-100
+		found = False
+		j=0
+		while found == False and j<len(self.Agent_grid):
+			if nb_env in self.Agent_grid[j][1]:
+				found = True
+				self.Agent_grid[j][0].change_environment(nb_env)
+				max_res = self.Agent_grid[j][0].check()
+			j+=1
+		j=0
+		while found == False and j<len(self.Agent_grid):
+			self.Agent_grid[j][0].change_environment(nb_env)
+			res=self.Agent_grid[j][0].check()
+			if res>=0.80:
+				max_res=res
+				found = True
+			j+=1
+		return max_res
 
-def generate_results_OAMT():
-	OAMT=OneAgentMultipleTrainings()
+def generate_results_MAOT():
+	MAOT=MultipleAgentsOneTraining()
 	training_time=[]
 	forget = []
 	general=[]
 	access=[]
 	t_time=0
 	for i in range(0,1001):
-		t_time+=OAMT.train(np.random.randint(65000))
+		t_time+=MAOT.train(np.random.randint(65000))
 		if i % 50 ==0:
-			OAMT.checkpoint(i)
+			MAOT.checkpoint(i)
 			count_tested = 0.0
 			count_ok = 0.0
 			for j in range(0,1001):
 				count_tested+=1.0
-				if OAMT.test(np.random.randint(65000))>=0.8:
+				if MAOT.test(np.random.randint(65000))>=0.8:
 					count_ok+=1.0
 			general.append(count_ok/count_tested)
 			print("*******************************Generalizability test : ",count_ok/count_tested,"*****************")
 	g_npy=np.array(general)
-	np.save('One_agent_multiple_training_general.npy',g_npy)
+	np.save('Multi_agent_one_training_general.npy',g_npy)
 	plt.title('% generalization on new environments')
 	plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
 	plt.plot(general, color='black', label='accuracy')
 	plt.legend()
-	plt.savefig('One_agent_multiple_training_general.png')
+	plt.savefig('Multi_agent_one_training_general.png')
 	plt.close()
 
 
@@ -130,7 +192,7 @@ def main():
 	random.seed(123456)
 	np.random.seed(123456)
 	
-	generate_results_OAMT()
+	generate_results_MAOT()
 
 if __name__ == "__main__":
 	main()

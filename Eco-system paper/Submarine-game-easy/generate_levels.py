@@ -25,7 +25,6 @@ from deer.learning_algos.q_net_keras import MyQNetwork
 import deer.experiment.base_controllers as bc
 from deer.policies import EpsilonGreedyPolicy
 
-import moviepy.editor as mpy
 import time
 
 def main():

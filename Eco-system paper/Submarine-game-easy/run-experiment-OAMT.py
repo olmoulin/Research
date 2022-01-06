@@ -1,12 +1,15 @@
 import numpy as np
-np.random.seed(122)
 
 import tensorflow as tf
-tf.random.set_seed(122)
 
 from tensorflow.keras.models import Sequential, save_model, load_model, model_from_json
 from tensorflow.keras.layers import Dense,PReLU,Input,Conv2D,Flatten
 from tensorflow.keras.optimizers import Adam, RMSprop
+
+from tensorflow.python.framework.ops import disable_eager_execution
+disable_eager_execution()
+from tensorflow.python.compiler.mlcompute import mlcompute
+mlcompute.set_mlc_device(device_name='cpu')
 
 from datetime import datetime
 from scipy.special import softmax
@@ -20,7 +23,6 @@ from deer.learning_algos.q_net_keras import MyQNetwork
 import deer.experiment.base_controllers as bc
 from deer.policies import EpsilonGreedyPolicy
 
-import moviepy.editor as mpy
 import time
 
 from deer.base_classes import Environment
@@ -194,37 +196,6 @@ class MarineEnv(Environment):
         img = Image.fromarray(data, 'RGB')
         display(img)
 
-    def make_frame(self,t):
-        display_Marine = np.copy(self.Marine)
-        print (t)
-        display_Marine[self.Y_history[int(t)],int(t)+1]=8
-        data = np.zeros((11*20,self.length*20, 3), dtype=np.uint8)
-        for i in range(0,self.length):
-            for j in range(0,11):
-                if display_Marine[j,i]==8:
-                    for l in range(0,20):
-                        for m in range(0,20):
-                            data[j*20+l,i*20+m]=[0,0,255]
-                            if self.display_submarine[l][m]==1:
-                                data[j*20+l,i*20+m]=[160,160,160]
-                else:
-                    for l in range(0,20):
-                        for m in range(0,20):
-                            if display_Marine[j,i]==0:
-                                data[j*20+l,i*20+m]=[0,0,255]
-                            if display_Marine[j,i]==1:
-                                if self.display_rock[l][m]==1:
-                                    data[j*20+l,i*20+m]=[88,41,0]
-                                else:
-                                    data[j*20+l,i*20+m]=[0,0,255]
-                            if i==self.lenght-1:
-                                data[j*20+l,i*20+m]=[0,255,0]
-        return(data)
-
-    def save_gif_result(self):
-        clip = mpy.VideoClip(self.make_frame, duration=len(self.Y_history))
-        clip.write_gif('animated_submarine_result.gif', fps=15)
-
 class Defaults:
     # ----------------------
     # Experiment Parameters
@@ -348,41 +319,11 @@ class SubMarineAgent():
             self.agent._environment.act(action)
         self.agent._environment.save_gif_result()
 
-    def load_NN(self,id_nn):
-        print("Loading Agent ",id_nn)
-        modelfile = "nnets/SubMarineAgent_Multi_"+str(id_nn)
-        model = model_from_json(open(modelfile+'.json').read())
-        model.load_weights(modelfile+'.h5')
-        self.agent._test_policy.learning_algo.q_vals=model
-        self.agent._test_policy.learning_algo.next_q_vals=model
-        self.agent._train_policy.learning_algo.q_vals=model
-        self.agent._train_policy.learning_algo.next_q_vals=model
-        print("Neural Network loaded.")
-
-    def save_NN(self,id_nn):
-        modelfile = "nnets/SubMarineAgent_Multi_"+str(id_nn)
-        open(modelfile+'.json', 'w').write(self.agent._test_policy.learning_algo.q_vals.to_json())
-        self.agent._test_policy.learning_algo.q_vals.save_weights(modelfile+'.h5', overwrite=True)
-        print("Neural Network saved.")
-
-    def load_NN_range(self):
-        modelfile = "nnets/SubMarineAgent_Mono"
-        model = model_from_json(open(modelfile+'.json').read())
-        model.load_weights(modelfile+'.h5')
-        self.agent._test_policy.learning_algo.q_vals=model
-        self.agent._test_policy.learning_algo.next_q_vals=model
-        self.agent._train_policy.learning_algo.q_vals=model
-        self.agent._train_policy.learning_algo.next_q_vals=model
-        print("Neural Network loaded.")
-
-    def save_NN_range(self):
-        modelfile = "nnets/SubMarineAgent_Mono"
-        open(modelfile+'.json', 'w').write(self.agent._test_policy.learning_algo.q_vals.to_json())
-        self.agent._test_policy.learning_algo.q_vals.save_weights(modelfile+'.h5', overwrite=True)
-        print("Neural Network saved.")
-
     def get_access(self):
         return self.nb_access
+    
+    def reset_access(self):
+        self.nb_access=0
 
     def solve(self):
         solved = False
@@ -398,107 +339,80 @@ class SubMarineAgent():
 
 class OneAgentMultipleTrainings():
     def __init__ (self):
-        self.Agent=SubMarineAgent(0)
-        self.Learned_env = np.array([])
-        if os.path.exists("nnets/SubMarineAgent_Mono.h5"):
-            self.Agent.load_NN_range()
-            self.Learned_env = (ag,np.load('nnets/SubMarineAgent_Mono.npy'))
+        self.single_agent = SubMarineAgent(0)
+        self.nb_access = 0 
+        
+    def get_access(self):
+        return self.nb_access
+    
+    def reset_access(self):
+        self.nb_access=0
 
     def train(self,env_seed):
-        if env_seed in self.Learned_env:
-            print("Already known, skipping ",env_seed)
-        else:
-            print("Training on environment ",env_seed)
-            start_time = time.time()
-            self.Agent.change_environment(env_seed)
-            if self.Agent.check()<100:
-                self.Agent.solve()
-                #self.Agent.replay()
-                self.Learned_env = np.append(self.Learned_env,env_seed)
-            elapsed_time = time.time() - start_time
-            print("Time elapsed: ",time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
+        print("Training on environment ",env_seed)
+        start_time = time.time()
+        self.single_agent.change_environment(env_seed)
+        self.single_agent.reset_access()
+        if self.single_agent.check()<100:
+            self.single_agent.solve()
+        self.nb_access+=self.single_agent.get_access()
+        elapsed_time = time.time() - start_time
+        print("Time elapsed: ",time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
+        sys.stdout.flush()
         return elapsed_time
 
-    def get_access(self):
-        return self.Agent.get_access()
+    def checkpoint(self,it):
+        self.single_agent.save(0,it)
 
-    def save_all(self):
-        self.Agent.save_NN_range()
-        np.save('nnets/SubMarineAgent_Mono.npy',self.Learned_env)
-
-    def print_architecture(self):
-        print("Mono-agent architecture")
-        print("Number of active agent : 1")
-        print("Number of environments covered : ",len(self.Learned_env))
-        print("Architecture")
-        print("Agent : 1")
-        print("Environments : ",self.Learned_env)
+    def restore(self,it):
+        self.single_agent = Agent(0)
+        self.single_agent.load(0,it)		
 
     def test(self,nb_env):
-        self.Agent.change_environment(nb_env)
-        rew = self.Agent.check()
-        #print("The reward is : ",rew)
-        return rew
+        self.single_agent.reset_access()
+        self.single_agent.change_environment(nb_env)
+        res = self.single_agent.check()
+        self.nb_access+=self.single_agent.get_access()
+        return res
 
 def generate_results_OAMT():
-    OAMT=OneAgentMultipleTrainings()
-    training_time=[]
-    forget = []
-    general=[]
-    access = []
-    t_time=0
-    for i in range(0,1001):
-        t_time+=OAMT.train(i)
-        if i%50==0:
-            training_time.append(t_time)
-            access.append(OAMT.get_access())
-            nb_ok=0
-            for j in range(0,i):
-                if OAMT.test(j)>=100:
-                    nb_ok+=1
-            if i>0:
-                forget.append(nb_ok/i)
-            else:
-                forget.append(nb_ok)
-            nb_ok=0
-            for j in range(1000,2000):
-                if OAMT.test(j)>=100:
-                    nb_ok+=1
-            general.append(nb_ok/10)
-    OAMT.save_all()
-    tt_npy = np.array(training_time)
-    np.save('One_agent_multi_training_time.npy',tt_npy)
-    f_npy=np.array(forget)
-    np.save('One_agent_multi_training_forget.npy',f_npy)
-    g_npy=np.array(general)
-    np.save('One_agent_multi_training_general.npy',g_npy)
-    a_npy=np.array(access)
-    np.save('One_agent_multi_training_access.npy',a_npy)
-    plt.title('Training time')
-    plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
-    plt.plot(training_time, color='black', label='duration')
-    plt.legend()
-    plt.savefig('One_agent_multi_training_duration.png')
-    plt.close()
-    plt.title('% accuracy on learned environments')
-    plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
-    plt.plot(forget, color='black', label='accuracy')
-    plt.legend()
-    plt.savefig('One_agent_multi_training_forget.png')
-    plt.close()
-    plt.title('% generalization on new environments')
-    plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
-    plt.plot(general, color='black', label='accuracy')
-    plt.legend()
-    plt.savefig('One_agent_multi_training_general.png')
-    plt.close()
-    plt.title('access to environments')
-    plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
-    plt.plot(access, color='black', label='access')
-    plt.legend()
-    plt.savefig('One_agent_multi_training_access.png')
-    plt.close()
-
+    for cpt in range(5):
+        rnd = np.random.randint(650000)
+        np.random.seed(rnd)
+        tf.random.set_seed(rnd) 
+        OAMT=OneAgentMultipleTrainings()
+        training_time=[]
+        forget = []
+        general=[]
+        access = []
+        t_time=0
+        for i in range(0,1001):
+            t_time+=OAMT.train(i)
+            if i%50==0:
+                training_time.append(t_time)
+                access.append(OAMT.get_access())
+                nb_ok=0
+                for j in range(0,i):
+                    if OAMT.test(j)>=100:
+                        nb_ok+=1
+                if i>0:
+                    forget.append(nb_ok/i)
+                else:
+                    forget.append(nb_ok)
+                nb_ok=0
+                for j in range(1000,2000):
+                    if OAMT.test(j)>=100:
+                        nb_ok+=1
+                general.append(nb_ok/10)
+        tt_npy = np.array(training_time)
+        np.save('One_agent_multi_training_time'+str(cpt)+'.npy',tt_npy)
+        f_npy=np.array(forget)
+        np.save('One_agent_multi_training_forget'+str(cpt)+'.npy',f_npy)
+        g_npy=np.array(general)
+        np.save('One_agent_multi_training_general'+str(cpt)+'.npy',g_npy)
+        a_npy=np.array(access)
+        np.save('One_agent_multi_training_access'+str(cpt)+'.npy',a_npy)
+    
 def main():
     generate_results_OAMT()
 

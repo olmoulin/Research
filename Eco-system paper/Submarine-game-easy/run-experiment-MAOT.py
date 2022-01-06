@@ -1,12 +1,15 @@
 import numpy as np
-np.random.seed(122)
 
 import tensorflow as tf
-tf.random.set_seed(122)
 
 from tensorflow.keras.models import Sequential, save_model, load_model, model_from_json
 from tensorflow.keras.layers import Dense,PReLU,Input,Conv2D,Flatten
 from tensorflow.keras.optimizers import Adam, RMSprop
+
+from tensorflow.python.framework.ops import disable_eager_execution
+disable_eager_execution()
+from tensorflow.python.compiler.mlcompute import mlcompute
+mlcompute.set_mlc_device(device_name='cpu')
 
 from datetime import datetime
 from scipy.special import softmax
@@ -20,7 +23,6 @@ from deer.learning_algos.q_net_keras import MyQNetwork
 import deer.experiment.base_controllers as bc
 from deer.policies import EpsilonGreedyPolicy
 
-import moviepy.editor as mpy
 import time
 
 from deer.base_classes import Environment
@@ -194,36 +196,6 @@ class MarineEnv(Environment):
         img = Image.fromarray(data, 'RGB')
         display(img)
 
-    def make_frame(self,t):
-        display_Marine = np.copy(self.Marine)
-        print (t)
-        display_Marine[self.Y_history[int(t)],int(t)+1]=8
-        data = np.zeros((11*20,self.length*20, 3), dtype=np.uint8)
-        for i in range(0,self.length):
-            for j in range(0,11):
-                if display_Marine[j,i]==8:
-                    for l in range(0,20):
-                        for m in range(0,20):
-                            data[j*20+l,i*20+m]=[0,0,255]
-                            if self.display_submarine[l][m]==1:
-                                data[j*20+l,i*20+m]=[160,160,160]
-                else:
-                    for l in range(0,20):
-                        for m in range(0,20):
-                            if display_Marine[j,i]==0:
-                                data[j*20+l,i*20+m]=[0,0,255]
-                            if display_Marine[j,i]==1:
-                                if self.display_rock[l][m]==1:
-                                    data[j*20+l,i*20+m]=[88,41,0]
-                                else:
-                                    data[j*20+l,i*20+m]=[0,0,255]
-                            if i==self.lenght-1:
-                                data[j*20+l,i*20+m]=[0,255,0]
-        return(data)
-
-    def save_gif_result(self):
-        clip = mpy.VideoClip(self.make_frame, duration=len(self.Y_history))
-        clip.write_gif('animated_submarine_result.gif', fps=15)
 
 class Defaults:
     # ----------------------
@@ -348,39 +320,9 @@ class SubMarineAgent():
             self.agent._environment.act(action)
         self.agent._environment.save_gif_result()
 
-    def load_NN(self,id_nn):
-        print("Loading Agent ",id_nn)
-        modelfile = "nnets/SubMarineAgent_Multi_"+str(id_nn)
-        model = model_from_json(open(modelfile+'.json').read())
-        model.load_weights(modelfile+'.h5')
-        self.agent._test_policy.learning_algo.q_vals=model
-        self.agent._test_policy.learning_algo.next_q_vals=model
-        self.agent._train_policy.learning_algo.q_vals=model
-        self.agent._train_policy.learning_algo.next_q_vals=model
-        print("Neural Network loaded.")
-
-    def save_NN(self,id_nn):
-        modelfile = "nnets/SubMarineAgent_Multi_"+str(id_nn)
-        open(modelfile+'.json', 'w').write(self.agent._test_policy.learning_algo.q_vals.to_json())
-        self.agent._test_policy.learning_algo.q_vals.save_weights(modelfile+'.h5', overwrite=True)
-        print("Neural Network saved.")
-
-    def load_NN_range(self):
-        modelfile = "nnets/SubMarineAgent_Mono"
-        model = model_from_json(open(modelfile+'.json').read())
-        model.load_weights(modelfile+'.h5')
-        self.agent._test_policy.learning_algo.q_vals=model
-        self.agent._test_policy.learning_algo.next_q_vals=model
-        self.agent._train_policy.learning_algo.q_vals=model
-        self.agent._train_policy.learning_algo.next_q_vals=model
-        print("Neural Network loaded.")
-
-    def save_NN_range(self):
-        modelfile = "nnets/SubMarineAgent_Mono"
-        open(modelfile+'.json', 'w').write(self.agent._test_policy.learning_algo.q_vals.to_json())
-        self.agent._test_policy.learning_algo.q_vals.save_weights(modelfile+'.h5', overwrite=True)
-        print("Neural Network saved.")
-
+    def reset_access(self):
+        self.nb_access=0
+        
     def get_access(self):
         return self.nb_access
 
@@ -399,19 +341,20 @@ class SubMarineAgent():
 class MultipleAgentsOneTraining():
     def __init__ (self):
         self.Agent_grid=[]
+        self.nb_access=0
         i=0
-        while os.path.exists("nnets/SubMarineAgent_Multi_"+str(i)+".h5"):
-            ag=SubMarineAgent(i)
-            ag.load_NN(i)
-            grid_ag = (ag,np.load('nnets/SubMarineAgent_Multi_'+str(i)+'.npy'))
-            self.Agent_grid.append(grid_ag)
-            i+=1
-        self.history_access = 0
+
+    def get_access(self):
+        return self.nb_access
+
+    def reset_access(self):
+        self.nb_access=0
 
     def sort_list(self,e):
         return(e[1].size)
 
     def train(self,env_seed):
+        training_frame = 0
         print("Training on environment ",env_seed)
         start_time = time.time()
         solved= False
@@ -419,46 +362,47 @@ class MultipleAgentsOneTraining():
         while solved==False and i<len(self.Agent_grid):
             ag_test = self.Agent_grid[i][0]
             ag_test.change_environment(env_seed)
+            ag_test.reset_access()
             if ag_test.check()>=100:
                 solved=True
             else:
                 i+=1
+            self.nb_access+=ag_test.get_access()
         if solved==False:
             ag=SubMarineAgent(env_seed)
+            ag.reset_access()
             ag.solve()
-            #ag.replay()
-            #ag.save_NN(len(self.Agent_grid))
-            grid_ag = (ag,np.array(env_seed))
+            self.nb_access+=ag.get_access()
+            grid_ag = (ag,np.array([env_seed]))
             self.Agent_grid.append(grid_ag)
             i = len(self.Agent_grid)-1
+            k = 0
+            while k<len(self.Agent_grid):
+                list_env = self.Agent_grid[k][1].tolist()
+                can_solve_all=True
+                for env_test in list_env:
+                    self.Agent_grid[i][0].change_environment(env_test)
+                    self.Agent_grid[i][0].reset_access()
+                    if self.Agent_grid[i][0].check()>=100:
+                        if env_test not in self.Agent_grid[i][1]:
+                            self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_test))
+                    else:
+                        can_solve_all=False
+                    self.nb_access+=self.Agent_grid[i][0].get_access()
+                if can_solve_all==True and k!=i:
+                    self.Agent_grid.pop(k)
+                    if k<i:
+                        i-=1
+                else:
+                    k+=1
         else:
             if env_seed not in self.Agent_grid[i][1]:
-                if (env_seed not in self.Agent_grid[i][1]):
-                    self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_seed))
-        j = 0
-        to_compare=self.Agent_grid[i][1]
-        while j<len(self.Agent_grid):
-            test_res = np.in1d(self.Agent_grid[j][1],to_compare)
-            if np.all(test_res) and j!=i:
-                self.history_access+=self.Agent_grid[j][0].get_access()
-                self.Agent_grid.pop(j)
-            else:
-                j+=1
+                self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_seed))
         self.Agent_grid.sort(key=self.sort_list,reverse=True)
         elapsed_time = time.time() - start_time
         print("Time elapsed: ",time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
+        sys.stdout.flush()
         return elapsed_time
-
-    def get_access(self):
-        total_access=0
-        for i in range(0,len(self.Agent_grid)):
-            total_access+=self.Agent_grid[i][0].get_access()
-        return self.history_access+total_access
-
-    def save_all(self):
-        for i in range(0,len(self.Agent_grid)):
-                self.Agent_grid[i][0].save_NN(i)
-                np.save('nnets/SubMarineAgent_Multi_'+str(i)+'.npy',self.Agent_grid[i][1])
 
     def print_architecture(self):
         print("Agent eco-system architecture")
@@ -466,90 +410,87 @@ class MultipleAgentsOneTraining():
         total_env = 0
         for i in range(0,len(self.Agent_grid)):
             total_env += self.Agent_grid[i][1].size
-        print("Number of environments covered : ",total_env)
+            print("Number of environments covered : ",total_env)
         print("Architecture")
         for i in range(0,len(self.Agent_grid)):
             print("Agent : ",i)
             print("Environments : ",self.Agent_grid[i][1])
 
+    def checkpoint(self,it):
+        for i in range(0,len(self.Agent_grid)):
+            self.Agent_grid[i][0].save(i,it)
+            np.save('Agent_covered_'+str(i)+'_'+str(it)+'.npy',self.Agent_grid[i][1])
+
+    def restore(self,it):
+        self.Agent_grid=[]
+        for i in range(0,len(self.Agent_grid)):
+            ag = SubMarineAgent(0)
+            ag.load(i,it)
+            env_covered = np.load('Agent_covered_'+str(i)+'_'+str(it)+'.npy')
+            self.Agent_grid.append((ag,env_covered))
+            
     def test(self,nb_env):
-        max_res=-100
+        max_res=0
         found = False
         j=0
         while found == False and j<len(self.Agent_grid):
             if nb_env in self.Agent_grid[j][1]:
                 found = True
                 self.Agent_grid[j][0].change_environment(nb_env)
+                self.Agent_grid[j][0].reset_access()
                 max_res = self.Agent_grid[j][0].check()
+                self.nb_access+=self.Agent_grid[j][0].get_access()
             j+=1
         j=0
         while found == False and j<len(self.Agent_grid):
             self.Agent_grid[j][0].change_environment(nb_env)
+            self.Agent_grid[j][0].reset_access()
             res=self.Agent_grid[j][0].check()
-            if res>=100:
+            self.nb_access+=self.Agent_grid[j][0].get_access()
+            if res>max_res:
                 max_res=res
+            if res>=100:
                 found = True
             j+=1
         return max_res
-
+    
 def generate_results_MAOT():
-    MAOT=MultipleAgentsOneTraining()
-    training_time=[]
-    forget = []
-    general=[]
-    access=[]
-    t_time=0
-    for i in range(0,1001):
-        t_time+=MAOT.train(i)
-        if i%50==0:
-            training_time.append(t_time)
-            access.append(MAOT.get_access())
-            nb_ok=0
-            for j in range(0,i):
-                if MAOT.test(j)>=100:
-                    nb_ok+=1
-            if i>0:
-                forget.append(nb_ok/i)
-            else:
-                forget.append(nb_ok)
-            nb_ok=0
-            for j in range(1000,2000):
-                if MAOT.test(j)>=100:
-                    nb_ok+=1
-            general.append(nb_ok/10)
-    MAOT.save_all()
-    tt_npy = np.array(training_time)
-    np.save('Multi_agent_one_training_time.npy',tt_npy)
-    f_npy=np.array(forget)
-    np.save('Multi_agent_one_training_forget.npy',f_npy)
-    g_npy=np.array(general)
-    np.save('Multi_agent_one_training_general.npy',g_npy)
-    a_npy=np.array(access)
-    np.save('Multi_agent_one_training_access.npy',a_npy)
-    plt.title('Training time')
-    plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
-    plt.plot(training_time, color='black', label='duration')
-    plt.legend()
-    plt.savefig('Multi_agent_one_training_duration.png')
-    plt.close()
-    plt.title('% accuracy on learned environments')
-    plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
-    plt.plot(forget, color='black', label='accuracy')
-    plt.legend()
-    plt.savefig('Multi_agent_one_training_forget.png')
-    plt.close()
-    plt.title('% generalization on new environments')
-    plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
-    plt.plot(general, color='black', label='accuracy')
-    plt.legend()
-    plt.savefig('Multi_agent_one_training_general.png')
-    plt.close()
-    plt.title('access to environments')
-    plt.xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],[0, 50, 100, 150, 200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000],rotation=90)
-    plt.plot(access, color='black', label='access')
-    plt.legend()
-    plt.savefig('Multi_agent_one_training_access.png')
-    plt.close()
+    for cpt in range(5):
+        rnd = np.random.randint(650000)
+        np.random.seed(rnd)
+        tf.random.set_seed(rnd)    
+        MAOT=MultipleAgentsOneTraining()
+        training_time=[]
+        forget = []
+        general=[]
+        access=[]
+        t_time=0
+        for i in range(0,1001):
+            t_time+=MAOT.train(i)
+            if i%50==0:
+                training_time.append(t_time)
+                access.append(MAOT.get_access())
+                nb_ok=0
+                for j in range(0,i):
+                    if MAOT.test(j)>=100:
+                        nb_ok+=1
+                if i>0:
+                    forget.append(nb_ok/i)
+                else:
+                    forget.append(nb_ok)
+                nb_ok=0
+                for j in range(1000,2000):
+                    if MAOT.test(j)>=100:
+                        nb_ok+=1
+                general.append(nb_ok/10)
+        tt_npy = np.array(training_time)
+        np.save('Multi_agent_one_training_time'+str(cpt)+'.npy',tt_npy)
+        f_npy=np.array(forget)
+        np.save('Multi_agent_one_training_forget'+str(cpt)+'.npy',f_npy)
+        g_npy=np.array(general)
+        np.save('Multi_agent_one_training_general'+str(cpt)+'.npy',g_npy)
+        a_npy=np.array(access)
+        np.save('Multi_agent_one_training_access'+str(cpt)+'.npy',a_npy)
 
 def main():
     generate_results_MAOT()

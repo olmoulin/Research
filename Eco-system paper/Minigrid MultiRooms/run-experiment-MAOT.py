@@ -34,6 +34,7 @@ class Agent():
 
 	def __init__ (self,env_nb):
 		self.env = gym.make('MiniGrid-MultiRoom-N2-S4-v0')
+		self.env = RGBImgPartialObsWrapper(self.env)
 		self.env = ImgObsWrapper(self.env)
 		self.env.seed(env_nb)	
 		self.env.reset()	
