@@ -1,3 +1,17 @@
+# Eco-system paper - (c) 2021 Olivier Moulin, Amsterdam Vrije Universiteit 
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3 of the License.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see http://www.gnu.org/licenses/.
+
 import numpy as np
 import copy
 from datetime import datetime
@@ -18,9 +32,9 @@ class Agent():
 		pe = self.env.unwrapped.grid.encode()
 		pe[self.env.agent_pos[0],self.env.agent_pos[1]]=10
 		pe = pe[:,:,0]
-		for i in range(0,25):
+		for i in range(0,19):
 			line =""
-			for j in range(0,25):
+			for j in range(0,19):
 				if pe[i,j]==1:
 					line=line+" "
 				if pe[i,j]==2:
@@ -33,8 +47,8 @@ class Agent():
 		
 
 	def __init__ (self,env_nb):
-		self.env = gym.make('MiniGrid-MultiRoom-N2-S4-v0')
-		self.env = RGBImgPartialObsWrapper(self.env)
+		self.env = gym.make('MiniGrid-FourRooms-v0')
+		#self.env = RGBImgPartialObsWrapper(self.env)
 		self.env = ImgObsWrapper(self.env)
 		self.env.seed(env_nb)	
 		self.env.reset()	
@@ -62,7 +76,7 @@ class Agent():
 			training_frame+=100000
 			chk = self.check()
 			print("Check for stopping training : ",chk)
-			if chk>=0.80:
+			if chk>=0.850:
 				solved = True
 			sys.stdout.flush()
 		return training_frame
@@ -78,20 +92,22 @@ class MultipleAgentsOneTraining():
 	def __init__ (self):
 		self.Agent_grid=[]
 		i=0
+		self.env_trained=0
 
 	def sort_list(self,e):
 		return(e[1].size)
 
 	def train(self,env_seed):
 		training_frame = 0
-		print("Training on environment ",env_seed)
+		self.env_trained+=1
+		print("Run ",self.env_trained," Training on environment ",env_seed)
 		start_time = time.time()
 		solved= False
 		i = 0
 		while solved==False and i<len(self.Agent_grid):
 			ag_test = self.Agent_grid[i][0]
 			ag_test.change_environment(env_seed)
-			if ag_test.check()>=0.80:
+			if ag_test.check()>=0.850:
 				solved=True
 			else:
 				i+=1
@@ -107,7 +123,7 @@ class MultipleAgentsOneTraining():
 				can_solve_all=True
 				for env_test in list_env:
 					self.Agent_grid[i][0].change_environment(env_test)
-					if self.Agent_grid[i][0].check()>=0.80:
+					if self.Agent_grid[i][0].check()>=0.850:
 						if env_test not in self.Agent_grid[i][1]:
 							self.Agent_grid[i]=(self.Agent_grid[i][0],np.append(self.Agent_grid[i][1],env_test))
 					else:
@@ -168,7 +184,7 @@ class MultipleAgentsOneTraining():
 			res=self.Agent_grid[j][0].check()
 			if res>max_res:
 				max_res=res
-			if res>=0.80:
+			if res>=0.850:
 				found = True
 			j+=1
 		return max_res
@@ -181,7 +197,7 @@ def generate_results_MAOT():
 	access=[]
 	t_time=0
 	training_frame=0
-	for i in range(0,1501):
+	for i in range(0,151):
 		tm,frm=MAOT.train(np.random.randint(65000))
 		t_time+=tm
 		training_frame+=frm
@@ -190,10 +206,10 @@ def generate_results_MAOT():
 			count_tested = 0.0
 			count_ok = 0.0
 			total_res = 0
-			for j in range(0,30):
+			for j in range(0,100):
 				count_tested+=1.0
 				res =MAOT.test(np.random.randint(65000)) 
-				if res>=0.8:
+				if res>=0.85:
 					count_ok+=1.0
 				if res<0:
 					res=0	
@@ -201,7 +217,7 @@ def generate_results_MAOT():
 			general.append(count_ok/count_tested)
 			print("*******************************Generalizability test : ",count_ok/count_tested,"*****************")
 			print("Total steps used :",training_frame)
-			print("Average return:",total_res/30)
+			print("Average return:",total_res/100)
 	g_npy=np.array(general)
 	np.save('Multi_agent_one_training_general.npy',g_npy)
 	plt.title('% generalization on new environments')
@@ -213,8 +229,8 @@ def generate_results_MAOT():
 
 
 def main():
-	random.seed(123456)
-	np.random.seed(123456)
+	random.seed(23456789)
+	np.random.seed(23456789)
 	
 	generate_results_MAOT()
 

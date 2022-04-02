@@ -13,42 +13,25 @@
 # along with this program.  If not, see http://www.gnu.org/licenses/.
 
 import numpy as np
-np.random.seed(122)
-
-import tensorflow as tf
-tf.random.set_seed(122)
-
-from tensorflow.python.framework.ops import disable_eager_execution
-disable_eager_execution()
-from tensorflow.python.compiler.mlcompute import mlcompute
-mlcompute.set_mlc_device(device_name='cpu')
-
-from tensorflow.keras.models import Sequential, save_model, load_model, model_from_json
-from tensorflow.keras.layers import Dense,PReLU,Input,Conv2D,Flatten
-from tensorflow.keras.optimizers import Adam, RMSprop
-
 from datetime import datetime
 from scipy.special import softmax
 import matplotlib.pyplot as plt
 import os, sys, time, datetime, json, random
 import gym
+from gym import spaces
 from PIL import Image
-from deer.default_parser import process_args
-from deer.agent import NeuralAgent
-from deer.learning_algos.q_net_keras import MyQNetwork
-import deer.experiment.base_controllers as bc
-from deer.policies import EpsilonGreedyPolicy
+from stable_baselines3 import PPO
 
 import time
 
-from deer.base_classes import Environment
 
-class MarineEnv(Environment):
-    def __init__(self,rng,seed,length):
-        self._random_state = rng
+length = 20
+
+class MarineEnv(gym.Env):
+    def __init__(self):
         self._last_ponctual_observation = [0, 0, 0]
-        self.seed = seed
-        self.Marine=np.load('level/level-'+str(seed)+'.npy')
+        self.seed = 1
+        self.Marine=np.load('level/level-'+str(self.seed)+'.npy')
         self.X=0
         self.Y=5
         self.length=length
@@ -89,9 +72,12 @@ class MarineEnv(Environment):
                     line[j]=np.random.randint(0,2)
             self.display_rock.append(line)
         self.environment_access = 0
+        self.action_space = spaces.Discrete(3,)
+        self.observation_space = spaces.Box(low=0, high=255,shape=(11*15+2,), dtype=np.float32)
 
-    def act(self, action):
+    def step(self, action):
         reward = 1
+        done = False
         self.total_step = self.total_step+1
         self.X=self.X+1
         if action==0:
@@ -102,13 +88,20 @@ class MarineEnv(Environment):
             self.Y=self.Y
         if self.Marine[self.Y,self.X]==1:
             reward=-100
+            done = True
         else:
             if self.X>=self.length-1:
                 reward=100
+                done= True
         self.Y_history.append(self.Y)
-        return reward
+        res=np.zeros((11*15+2,))
+        res[0:11*15]=self.Marine[0:11,self.X:self.X+15].flatten()
+        res[11*15]=self.Y
+        res[11*15+1]=self.X
+        state=res
+        return state,reward,done,{}
 
-    def reset(self,mode):
+    def reset(self):
         self.X=0
         self.Y=5
         res=np.zeros((11*15+2,))
@@ -124,236 +117,70 @@ class MarineEnv(Environment):
     def reset_access(self):
         self.environment_access=0
 
-    def inputDimensions(self):
-        res = []
-        for i in range(0,11*15+2):
-            res.append((1,))
-        return res
-
-    def nActions(self):
-        return 3
-
-    def inTerminalState(self):
-        res=False
-        if self.Marine[self.Y,self.X]==1:
-            res= True
-        else:
-            if self.X>=self.length-1:
-                res = True
-        return res
-
-    def observe(self):
-        res=np.zeros((11*15+2,))
-        res[0:11*15]=self.Marine[0:11,self.X:self.X+15].flatten()
-        res[11*15]=self.Y
-        res[11*15+1]=self.X
-        state=res
-        self.environment_access+=1
-        return state
-
     def get_access(self):
         return self.environment_access
 
     def update_seed (self,seed):
         self.seed = seed
         self.Marine=np.load('level/level-'+str(seed)+'.npy')
-        self.reset(0)
+        self.reset()
 
-    def render(self):
-        display_Marine = np.copy(self.Marine)
-        display_Marine[self.Y,self.X]=8
-        data = np.zeros((11*20,self.length*20, 3), dtype=np.uint8)
-        for i in range(0,self.length):
-            for j in range(0,11):
-                if display_Marine[j,i]==8:
-                    for l in range(0,20):
-                        for m in range(0,20):
-                            data[j*20+l,i*20+m]=[0,0,255]
-                            if self.display_submarine[l][m]==1:
-                                data[j*20+l,i*20+m]=[160,160,160]
-                else:
-                    for l in range(0,20):
-                        for m in range(0,20):
-                            if display_Marine[j,i]==0:
-                                data[j*20+l,i*20+m]=[0,0,255]
-                            if display_Marine[j,i]==1:
-                                if self.display_rock[l][m]==1:
-                                    data[j*20+l,i*20+m]=[88,41,0]
-                                else:
-                                    data[j*20+l,i*20+m]=[0,0,255]
-                            if i==self.length-1:
-                                data[j*20+l,i*20+m]=[0,255,0]
-        img = Image.fromarray(data, 'RGB')
-        display(img)
 
-    def render_with_agent(self):
-        display_Marine = np.copy(self.Marine)
-        for i in range(0,len(self.Y_history)):
-            display_Marine[self.Y_history[i],i]=8
-        data = np.zeros((11*20,self.length*20, 3), dtype=np.uint8)
-        for i in range(0,self.length):
-            for j in range(0,11):
-                if display_Marine[j,i]==8:
-                    for l in range(0,20):
-                        for m in range(0,20):
-                            data[j*20+l,i*20+m]=[0,0,255]
-                            if self.display_submarine[l][m]==1:
-                                data[j*20+l,i*20+m]=[160,160,160]
-                else:
-                    for l in range(0,20):
-                        for m in range(0,20):
-                            if display_Marine[j,i]==0:
-                                data[j*20+l,i*20+m]=[0,0,255]
-                            if display_Marine[j,i]==1:
-                                if self.display_rock[l][m]==1:
-                                    data[j*20+l,i*20+m]=[88,41,0]
-                                else:
-                                    data[j*20+l,i*20+m]=[0,0,255]
-                            if i==self.length-1:
-                                data[j*20+l,i*20+m]=[0,255,0]
-        img = Image.fromarray(data, 'RGB')
-        display(img)
 
-class Defaults:
-    # ----------------------
-    # Experiment Parameters
-    # ----------------------
-    STEPS_PER_EPOCH = 1000
-    EPOCHS = 100
-    STEPS_PER_TEST = 500
-    PERIOD_BTW_SUMMARY_PERFS = 1
-
-    # ----------------------
-    # Environment Parameters
-    # ----------------------
-    FRAME_SKIP = 1
-
-    # ----------------------
-    # DQN Agent parameters:
-    # ----------------------
-    UPDATE_RULE = 'rmsprop'
-    LEARNING_RATE = 0.005
-    LEARNING_RATE_DECAY = 1.
-    DISCOUNT = 0.9
-    DISCOUNT_INC = 1.
-    DISCOUNT_MAX = 0.99
-    RMS_DECAY = 0.9
-    RMS_EPSILON = 0.0001
-    MOMENTUM = 0
-    CLIP_NORM = 1.0
-    EPSILON_START = 1.0
-    EPSILON_MIN = .1
-    EPSILON_DECAY = 10000
-    UPDATE_FREQUENCY = 1
-    REPLAY_MEMORY_SIZE = 1000000
-    BATCH_SIZE = 32
-    FREEZE_INTERVAL = 1000
-    DETERMINISTIC = True
-
-class SubMarineAgent():
-    def __init__ (self,env_nb):
-        self.parameters = Defaults()
-        self.rng = np.random.RandomState(122)
-        env = MarineEnv(self.rng,env_nb,20)
-        self.qnetwork = MyQNetwork(
-            env,
-            self.parameters.RMS_DECAY,
-            self.parameters.RMS_EPSILON,
-            self.parameters.MOMENTUM,
-            self.parameters.CLIP_NORM,
-            self.parameters.FREEZE_INTERVAL,
-            self.parameters.BATCH_SIZE,
-            self.parameters.UPDATE_RULE,
-            self.rng)
-        self.train_policy = EpsilonGreedyPolicy(self.qnetwork, env.nActions(), self.rng, 0.1)
-        self.test_policy = EpsilonGreedyPolicy(self.qnetwork, env.nActions(), self.rng, 0.)
-        self.agent = NeuralAgent(
-            env,
-            self.qnetwork,
-            self.parameters.REPLAY_MEMORY_SIZE,
-            max(env.inputDimensions()[i][0] for i in range(len(env.inputDimensions()))),
-            self.parameters.BATCH_SIZE,
-            self.rng,
-            train_policy=self.train_policy,
-            test_policy=self.test_policy)
-        self.agent.attach(bc.VerboseController(
-            evaluate_on='epoch',
-            periodicity=1))
-        self.agent.attach(bc.TrainerController(
-            evaluate_on='action',
-            periodicity=self.parameters.UPDATE_FREQUENCY,
-            show_episode_avg_V_value=False,
-            show_avg_Bellman_residual=False))
-        self.agent.attach(bc.LearningRateController(
-            initial_learning_rate=self.parameters.LEARNING_RATE,
-            learning_rate_decay=self.parameters.LEARNING_RATE_DECAY,
-            periodicity=1))
-        self.agent.attach(bc.DiscountFactorController(
-            initial_discount_factor=self.parameters.DISCOUNT,
-            discount_factor_growth=self.parameters.DISCOUNT_INC,
-            discount_factor_max=self.parameters.DISCOUNT_MAX,
-            periodicity=1))
-        self.agent.attach(bc.EpsilonController(
-            initial_e=self.parameters.EPSILON_START,
-            e_decays=self.parameters.EPSILON_DECAY,
-            e_min=self.parameters.EPSILON_MIN,
-            evaluate_on='action',
-            periodicity=1,
-            reset_every='none'))
-        self.agent.attach(bc.InterleavedTestEpochController(
-            id=0,
-            epoch_length=self.parameters.STEPS_PER_TEST,
-            periodicity=1,
-            show_score=True,
-            summarize_every=self.parameters.PERIOD_BTW_SUMMARY_PERFS))
-        self.nb_access = 0
-
-    def change_environment(self,nb_env):
-        self.agent._environment.update_seed(nb_env)
-
-    def replay(self):
-        self.agent._environment.reset(0)
-        while self.agent._environment.inTerminalState()==False:
-            action = self.agent._test_policy.action(self.agent._environment.observe())[0]
-            self.agent._environment.act(action)
-        self.agent._environment.render_with_agent()
-        self.nb_access+=self.agent._environment.get_access()
-
-    def check(self):
-        self.agent._environment.reset(0)
-        total_rew =0
-        self.agent._environment.reset_access()
-        while self.agent._environment.inTerminalState()==False:
-            action = self.agent._test_policy.action(self.agent._environment.observe())[0]
-            rew=self.agent._environment.act(action)
-            total_rew+=rew
-        self.nb_access+=self.agent._environment.get_access()
-        return (total_rew)
-
-    def generate_gif(self):
-        self.agent._environment.reset(0)
-        while self.agent._environment.inTerminalState()==False:
-            action = self.agent._test_policy.action(self.agent._environment.observe())[0]
-            self.agent._environment.act(action)
-        self.agent._environment.save_gif_result()
-
-    def reset_access(self):
-        self.nb_access=0
+class SubMarineAgent():            
         
-    def get_access(self):
-        return self.nb_access
+        def __init__ (self,env_nb):
+            self.env = MarineEnv()
+            self.env.update_seed(env_nb)	
+            self.env.reset()	
+            #self.print_environment()
+            self.model = PPO("MlpPolicy",self.env,verbose=0)
+            self.nb_access = 0
+            
+        def change_environment(self,nb_env):
+            self.env.update_seed(nb_env)
+        
+        def check(self):
+            state = self.env.reset()
+            total_rew =0
+            done = False
+            self.env.reset_access()
+            while done == False:
+                action, _states = self.model.predict(state,deterministic=True)
+                state, reward, done, _ = self.env.step(action)
+                total_rew+=reward
+            self.nb_access+=self.env.get_access()
+            return total_rew
+        
+        def solve(self):
+            training_frame = 0
+            solved = False
+            while solved==False:
+                self.env.reset_access()
+                self.model.learn(total_timesteps=10000)
+                training_frame+=10000
+                self.nb_access+=self.env.get_access()
+                self.env.reset_access()
+                chk = self.check()
+                self.nb_access+=self.env.get_access()
+                print("Check for stopping training : ",chk)
+                if chk>=0.80:
+                    solved = True
+                sys.stdout.flush()
+            return training_frame
+                
+        def save(self,i,it):
+            self.model.save('Agent_'+str(i)+'_'+str(it)+'.mdl')
+        
+        def load(self,i,it):
+            self.model = PPO.load('Agent_'+str(i)+'_'+str(it)+'.mdl')
+                    
+        def reset_access(self):
+            self.nb_access=0
+            
+        def get_access(self):
+            return self.nb_access
 
-    def solve(self):
-        solved = False
-        while solved==False:
-            self.agent._environment.reset(0)
-            self.agent._environment.reset_access()
-            self.agent.run(1, self.parameters.STEPS_PER_EPOCH)
-            self.nb_access+=self.agent._environment.get_access()
-            self.agent._environment.reset_access()
-            if self.check()>=100:
-                solved = True
-            self.nb_access+=self.agent._environment.get_access()
 
 class MultipleAgentsOneTraining():
     def __init__ (self):
@@ -373,7 +200,6 @@ class MultipleAgentsOneTraining():
     def train(self,env_seed):
         training_frame = 0
         print("Training on environment ",env_seed)
-        sys.stdout.flush()
         start_time = time.time()
         solved= False
         i = 0
@@ -476,7 +302,7 @@ def generate_results_MAOT():
     for cpt in range(5):
         rnd = np.random.randint(650000)
         np.random.seed(rnd)
-        tf.random.set_seed(rnd)    
+        random.seed(rnd) 
         MAOT=MultipleAgentsOneTraining()
         training_time=[]
         forget = []

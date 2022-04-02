@@ -1,3 +1,17 @@
+# Eco-system paper - (c) 2021 Olivier Moulin, Amsterdam Vrije Universiteit 
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3 of the License.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see http://www.gnu.org/licenses/.
+
 import numpy as np
 np.random.seed(1231231)
 
@@ -12,9 +26,9 @@ from PIL import Image
 import time
 
 def generate_results_comparison():
-    plt.title("Training time on initial environments (Submarine easy)", size=15,y=1.06)
-    x = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-    plt.xticks([1,4,8,12,16,20],[50,200,400,600,800,1000],rotation=0)
+    plt.title("Training time on initial environments (Submarine hard)", size=15,y=1.06)
+    x = [1,2,3,4,5,6]
+    plt.xticks([1,3,5,6],[50,150,250,300],rotation=0)
     plt.ylabel('seconds', size=14)
     plt.xlabel('# of environment trained' , size=14)
     OAMT_training_time_0 = np.load('One_agent_multi_training_time0.npy')
@@ -103,12 +117,12 @@ def generate_results_comparison():
     red_patch = mpatches.Patch(color='orange', label='single-agent')
     blue_patch = mpatches.Patch(color='purple', label='eco-system')
     plt.legend(handles=[red_patch,blue_patch])
-    plt.savefig('Architecture_comparison_duration_easy.pdf')
+    plt.savefig('Architecture_comparison_duration_hard_PPO.pdf')
     plt.close()
 
-    plt.title("Catastrophic forgetting avoidance index (Submarine easy)", size=15,y=1.06)
-    x = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-    plt.xticks([1,4,8,12,16,20],[50, 200,400,600,800,1000],rotation=0)
+    plt.title("Catastrophic forgetting avoidance index (Submarine hard)", size=15,y=1.06)
+    x = [1,2,3,4,5,6]
+    plt.xticks([1,3,5,6],[50,150,250,300],rotation=0)
     plt.ylabel('% accuracy', size=14)
     plt.xlabel('# of environment trained', size=14)
     OAMT_training_forget_0 = np.load('One_agent_multi_training_forget0.npy')
@@ -198,13 +212,13 @@ def generate_results_comparison():
     red_patch = mpatches.Patch(color='orange', label='single-agent')
     blue_patch = mpatches.Patch(color='purple', label='eco-system')
     plt.legend(handles=[red_patch,blue_patch])
-    plt.savefig('Architecture_comparison_forget_easy.pdf')
+    plt.savefig('Architecture_comparison_forget_hard_PPO.pdf')
     plt.close()
 
 
-    plt.title("Adaptability index on new environments (Submarine easy)", size=15,y=1.06)
-    x = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-    plt.xticks([1,4,8,12,16,20],[50, 200,400,600,800,1000],rotation=0)
+    plt.title("Adaptability index on new environments (Submarine hard)", size=15,y=1.06)
+    x = [1,2,3,4,5,6]
+    plt.xticks([1,3,5,6],[50,150,250,300],rotation=0)
     plt.ylabel('% solved', size = 14)
     plt.xlabel('# of environment trained', size = 14)
     OAMT_training_general_0 = np.load('One_agent_multi_training_general0.npy')
@@ -293,12 +307,12 @@ def generate_results_comparison():
     red_patch = mpatches.Patch(color='orange', label='single-agent')
     blue_patch = mpatches.Patch(color='purple', label='eco-system')
     plt.legend(handles=[red_patch,blue_patch])
-    plt.savefig('Architecture_comparison_general_easy.pdf')
+    plt.savefig('Architecture_comparison_general_hard_PPO.pdf')
     plt.close()
     
-    plt.title("Number of accesses to environments (Submarine easy)", size=15,y=1.06)
-    x = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-    plt.xticks([1,4,8,12,16,20],[50, 200,400,600,800,1000],rotation=0)
+    plt.title("Number of accesses to environments (Submarine hard)", size=15,y=1.06)
+    x = [1,2,3,4,5,6]
+    plt.xticks([1,3,5,6],[50,150,250,300],rotation=0)
     plt.ylabel('# accesses', size = 14)
     plt.xlabel('# of environment trained', size = 14)
     OAMT_training_access_0 = np.load('One_agent_multi_training_access0.npy')
@@ -387,7 +401,7 @@ def generate_results_comparison():
     red_patch = mpatches.Patch(color='orange', label='single-agent')
     blue_patch = mpatches.Patch(color='purple', label='eco-system')
     plt.legend(handles=[red_patch,blue_patch])
-    plt.savefig('Architecture_comparison_access_easy.pdf')
+    plt.savefig('Architecture_comparison_access_hard_PPO.pdf')
     plt.close()
     
 

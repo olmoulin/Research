@@ -18,26 +18,12 @@ np.random.seed(1231231)
 import tensorflow as tf
 tf.random.set_seed(1231231)
 
-from tensorflow.python.framework.ops import disable_eager_execution
-disable_eager_execution()
-from tensorflow.python.compiler.mlcompute import mlcompute
-mlcompute.set_mlc_device(device_name='cpu')
-
-from tensorflow.keras.models import Sequential, save_model, load_model, model_from_json
-from tensorflow.keras.layers import Dense,PReLU,Input,Conv2D,Flatten
-from tensorflow.keras.optimizers import Adam, RMSprop
-
 from datetime import datetime
 from scipy.special import softmax
 import matplotlib.pyplot as plt
 import os, sys, time, datetime, json, random
 import gym
 from PIL import Image
-from deer.default_parser import process_args
-from deer.agent import NeuralAgent
-from deer.learning_algos.q_net_keras import MyQNetwork
-import deer.experiment.base_controllers as bc
-from deer.policies import EpsilonGreedyPolicy
 
 import time
 
