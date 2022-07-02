@@ -72,10 +72,11 @@ eco_std_dev = eco_var + eco_var2 + eco_var3 + eco_var4 + eco_var5
 eco_std_dev = eco_std_dev/5
 eco_std_dev = np.sqrt(eco_std_dev)
 
-plt.title("Adaptability index on new environments (MultiRoom)", size=15,y=1.06)
+plt.title("Generalizability index on new environments", size=16,y=1.06)
 x=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]
-plt.xticks([0,4,8,12,16,20],[3,145,263,358,447,568],rotation=0)
-plt.ylabel('Avg. expected return', size=14)
+plt.xticks([0,4,8,12,16,20],[3,145,263,358,447,568],rotation=0,size=15)
+plt.yticks(size=15)
+plt.ylabel('Avg. expected return', size=15)
 plt.xlabel('# of training steps (x100000)',size =14)  
 plt.plot(avg_eco,color='purple',label='Eco-system')
 #plt.plot(max_eco,color='blue',label='Eco-system')

@@ -1,17 +1,3 @@
-# Eco-system paper - (c) 2021 Olivier Moulin, Amsterdam Vrije Universiteit 
-
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, version 3 of the License.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see http://www.gnu.org/licenses/.
-
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -119,9 +105,10 @@ eco_std_dev_9 = eco_std_dev_9/5
 eco_std_dev_9 = np.sqrt(eco_std_dev_9)
 
 x=[0,1,2,3]
-plt.title("Adaptability index on new environments (FourRoom)", size=15,y=1.06)
-plt.xticks([0,1,2,3],[5,150,402,564],rotation=0)
-plt.ylabel('Avg. expected return', size=14)
+plt.title("Generalizability index on new environments", size=16,y=1.06)
+plt.xticks([0,1,2,3],[5,150,402,564],rotation=0,size=15)
+plt.yticks(size=15)
+plt.ylabel('Avg. expected return', size=16)
 plt.xlabel('# of training steps (x100000)',size =14)  
 
 plt.plot(avg_eco_8,color='green',label='Threshold = 0.8')
